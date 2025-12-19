@@ -1,6 +1,8 @@
 #pragma once
 #include "packet.h"
 
+int Net_Ping(int fd);
+
 int Net_InitClient(const char* ip, int port);
 
 int Net_SendPacket(int fd, uint8_t type, void* data,

@@ -8,17 +8,21 @@
 #define SCREEN_HEIGHT 800
 #define PLAYER_SPEED 200
 
-int main(void)
+#define PING_INTERVAL 1.0f
+
+int main(int argc, char *argv[])
 {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "test game");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, argv[0]);
     SetTargetFPS(60);
 
     int net_fd = Net_InitClient("127.0.0.1", 21337);
-    if (net_fd == -1) printf("Network failed to connect (is server running?)\n");
+    if (net_fd == -1) {
+        printf("failed to connect, is the server running? :-)\n");
+    }
 
     Vector2 pos = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2 };
     Vector2 size = { 40, 40 };
-    Color color = { 255, 255, 255, 255 };
+    Color color = { 255, 255, 255, 100 };
 
     Vector2 server_pos = pos; 
     Color ghost_color = { 255, 0, 0, 100 }; 
@@ -26,9 +30,23 @@ int main(void)
     float speed = PLAYER_SPEED;
     uint8_t net_buffer[1024];
 
+    float ping_timer = 0.0f;
+    double rtt_seconds = 0;
+
     while(!WindowShouldClose()) {
+
+
         float deltaTime = GetFrameTime();
         bool moved = false;
+
+        ping_timer += deltaTime;
+
+        if (ping_timer >= PING_INTERVAL) {
+            printf("pinging...\n");
+            Net_Ping(net_fd);
+
+            ping_timer -= PING_INTERVAL; 
+        }
 
         if(IsKeyDown(KEY_W)) { pos.y -= speed*deltaTime; moved = true; }
         if(IsKeyDown(KEY_S)) { pos.y += speed*deltaTime; moved = true; }
@@ -51,12 +69,24 @@ int main(void)
                     server_pos.x = ghost_update->x;
                     server_pos.y = ghost_update->y;
                 }
+                if (in_header.type == PACKET_TYPE_PING) {
+                    clock_t end_t = clock();
+
+                    struct PacketEcho* recv_p = (struct PacketEcho*)net_buffer;
+
+                    rtt_seconds = (double)(end_t - recv_p->time) / CLOCKS_PER_SEC;
+
+                }
             }
         }
 
         BeginDrawing();
         ClearBackground(BLACK);
 
+        DrawText(
+            TextFormat("ping: %.3f ms", rtt_seconds * 1000),
+            SCREEN_WIDTH/2 - 30, 0, 20, WHITE
+        );
         DrawRectangleV(server_pos, size, ghost_color);
         DrawRectangleV(pos, size, color);
 
