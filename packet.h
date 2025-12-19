@@ -15,21 +15,24 @@ enum p_flag {
     TYPE8 = 0x80,
 };
 
-struct header {
-    uint8_t type;
-    uint8_t flags;
-
-    uint64_t size; // data size in byte(s)
-    uint64_t id;
+enum p_type {
+    PACKET_TYPE_CONNECT = 0,
+    PACKET_TYPE_MOVE    = 1
 };
 
-struct data {
-    uint8_t p_data[MAX_P_SIZE];
+#pragma pack(push, 1)
+struct header {
+    uint8_t type;
+    uint16_t data_size;
 };
 
 struct packet {
     struct header _header;
-    struct data _data;
+    uint8_t data[MAX_P_SIZE];
 };
 
-
+struct PacketVector2 {
+    float x;
+    float y;
+};
+#pragma back(pop)
