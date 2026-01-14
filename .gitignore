@@ -10,3 +10,4 @@ server
 
 # git stuff
 .git
+.env
