@@ -1,4 +1,12 @@
+# other
 notes
+
+# bin's
 game
 server
+
+# object files
+*.o
+
+# git stuff
 .git
