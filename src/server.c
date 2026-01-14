@@ -38,11 +38,11 @@ int main() {
     uint8_t buffer[2048];
 
     while(1) {
-        // blocking recv
-        // not for prod
         if (recv(client_fd, &in_header, sizeof(in_header), 0) <= 0)
             break;
 
+        // TODO: This assumes i have recieved all of the bytes
+        // when all of the bytes might not been recieved, fix asap.
         if (in_header.data_size > 0) {
             recv(client_fd, buffer, in_header.data_size, 0);
         }
