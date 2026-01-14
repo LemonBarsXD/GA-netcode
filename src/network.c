@@ -8,19 +8,23 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
-int Net_Ping(int fd) {
+int
+Net_Ping(
+    int fd
+)
+{
     if(fd < 0) {
         return -1;
     }
 
     clock_t start_t = clock();
 
-    struct PacketEcho pkt; 
+    ping_t pkt; 
     pkt.diff = 0;
     pkt.time = start_t;
 
-    struct header h;
-    h.type = PACKET_TYPE_PING;
+    header_t h;
+    h.type = PACKET_PING;
     h.data_size = sizeof(pkt);
 
     if(send(fd, &h, sizeof(h), 0) == -1) {
@@ -36,7 +40,11 @@ int Net_Ping(int fd) {
     return 0;
 }
 
-int Net_InitClient(const char* ip, int port)
+int 
+Net_InitClient(
+    const char* ip,
+    int port
+)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -63,9 +71,15 @@ int Net_InitClient(const char* ip, int port)
     return fd;
 }
 
-int Net_SendPacket(int fd, uint8_t type, void* data, uint16_t size) 
+int
+Net_SendPacket(
+    int fd,
+    uint8_t type,
+    void* data,
+    uint16_t size
+)
 {
-    struct header h;
+    header_t h;
     h.type = type;
     h.data_size = size;
 
@@ -81,9 +95,15 @@ int Net_SendPacket(int fd, uint8_t type, void* data, uint16_t size)
     return 0;
 }
 
-int Net_ReceivePacket(int fd, struct header* out_header, void* out_data_buffer, int max_buffer_size)
+int
+Net_ReceivePacket(
+    int fd,
+    header_t* out_header,
+    void* out_data_buffer,
+    int max_buffer_siz
+)
 {
-    ssize_t bytes_read = recv(fd, out_header, sizeof(struct header), 0);
+    ssize_t bytes_read = recv(fd, out_header, sizeof(header_t), 0);
 
     if (bytes_read > 0) {
         if (out_header->data_size > 0) {
@@ -103,10 +123,13 @@ int Net_ReceivePacket(int fd, struct header* out_header, void* out_data_buffer, 
         printf("[NETW] Server closed connection.\n");
     }
 
-    return 0; 
+    return 0;
 }
 
-void Net_Close(int fd) 
+void
+Net_Close(
+    int fd
+)
 {
     close(fd);
 }
