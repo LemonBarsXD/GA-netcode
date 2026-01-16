@@ -37,14 +37,34 @@ int main() {
     header_t in_header;
     uint8_t buffer[2048];
 
+    int ret_val = 0;
     while(1) {
         if (recv(client_fd, &in_header, sizeof(in_header), 0) <= 0)
             break;
 
-        // TODO: This assumes i have recieved all of the bytes
-        // when all of the bytes might not been recieved, fix asap.
+        // fixed loop to not assume full data receivment
         if (in_header.data_size > 0) {
-            recv(client_fd, buffer, in_header.data_size, 0);
+            int bytes_received = 0;
+            while (bytes_received < in_header.data_size) {
+                int r = recv(
+                    client_fd,
+                    buffer + bytes_received,
+                    in_header.data_size - bytes_received,
+                    0
+                );
+
+                if (r < 0) {
+                    perror("fatal network error");
+                    ret_val = -1;
+                    goto disconnect;
+                } else if (r == 0) {
+                    perror("client closed connection");
+                    ret_val = -1;
+                    goto disconnect;
+                }
+
+                bytes_received += r;
+            }
         }
 
         if (in_header.type == PACKET_USERINPUT) {
@@ -92,7 +112,8 @@ int main() {
         }
     }
 
+disconnect:
     close(client_fd);
     close(listen_fd);
-    return 0;
+    return ret_val;
 }

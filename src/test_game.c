@@ -44,10 +44,11 @@ int main(int argc, char *argv[])
         // its complicated...
         if (dt > 0.25) dt = 0.25;
         accumulator += dt;
+        ping_timer += dt;
 
         // ping the server
         if (ping_timer >= PING_INTERVAL) {
-            printf("pinging...\n");
+            // printf("pinging...\n");
             Net_Ping(net_fd);
 
             ping_timer -= PING_INTERVAL;
@@ -150,7 +151,7 @@ int main(int argc, char *argv[])
         );
         DrawText(
             TextFormat(
-                "Ping: %f",
+                "Ping: %.3f ms",
                 rtt_seconds * 1000),
             10,
             30,
