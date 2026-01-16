@@ -10,15 +10,16 @@
 #include <stdint.h>
 #include <time.h>
 
-// Configurations
+// configuration
 #define TICK_RATE           64
 #define TICK_DELTA          (1.0f / (float)TICK_RATE) // ca. 0.0156
 
 // packet types
-#define PACKET_CONNECT      0
-#define PACKET_PING         1
-#define PACKET_USERINPUT    2
-#define PACKET_STATE        3
+#define PACKET_DISCONNECT   0
+#define PACKET_CONNECT      1
+#define PACKET_PING         2
+#define PACKET_USERINPUT    3
+#define PACKET_STATE        4
 
 // input bitmasks
 #define IN_FORWARD          (1 << 0)
@@ -38,6 +39,11 @@ typedef struct {
 } header_t;
 
 typedef struct {
+    uint32_t entindex;
+    uint32_t version;
+} net_handshake_t;
+
+typedef struct {
     uint64_t tick_number;
     uint32_t buttons;      // bitmask of inputs
     float view_angle_yaw;
@@ -46,8 +52,10 @@ typedef struct {
 
 typedef struct {
     uint64_t last_processed_tick; // for reconciliation
+    uint32_t entindex;
     float x;
     float y;
+    float z;
 } server_state_t;
 
 typedef struct {

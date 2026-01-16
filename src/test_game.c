@@ -12,20 +12,40 @@
 
 #define PING_INTERVAL 1.0f
 
+#define MAX_PLAYERS 6
+
+// simple struct to track everyone else
+typedef struct {
+    int active;
+    Vector2 pos;
+    Color color;
+} remote_player_t;
+
 int main(int argc, char *argv[])
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, argv[0]);
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
     int net_fd = Net_InitClient("127.0.0.1", 21337);
-    if (net_fd == -1)
+    if (net_fd == -1) {
         printf("failed to connect, is the server running? :-)\n");
+    } else {
+        Net_SendPacket(
+            net_fd,
+            PACKET_CONNECT,
+            NULL,
+            0
+        );
+    }
 
     Vector2 my_pos = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2 };
-    Vector2 server_pos = my_pos;
+    Vector2 my_server_ghost = my_pos;
+    remote_player_t other_players[MAX_PLAYERS] = {0};
+    int my_entindex = -1;
 
     Color my_color = { 255, 255, 255, 100 };
     Color ghost_color = { 255, 0, 0, 100 };
+    Color others_color = { 0, 126, 126, 100 };
 
     double accumulator = 0.0;
     uint64_t client_tick = 0;
@@ -111,26 +131,42 @@ int main(int argc, char *argv[])
                     net_buffer,
                     1024
                 )
-            ) {
+            )
+            {
+                if (in_header.type == PACKET_CONNECT) {
+                    net_handshake_t* hs = (net_handshake_t*)net_buffer;
+                    printf("Handshake comlete! \nMy ID: %d \nGame version: %d", hs->entindex, hs->version);
+                    my_entindex = hs->entindex;
+                }
+
                 if (in_header.type == PACKET_STATE) {
                     server_state_t* state = (server_state_t*)net_buffer;
-                    server_pos.x = state->x;
-                    server_pos.y = state->y;
 
-                    // simple reconciliation snap
-                    if(Vector2Distance(my_pos, server_pos) > 20.0f) {
-                        puts("Applied Reconciliation!");
-                        my_pos = server_pos;
+                    int id = state->entindex;
+
+                    if (id < 0 || id >= MAX_PLAYERS) continue;
+
+                    if(id == my_entindex) {
+                        my_server_ghost.x = state->x;
+                        my_server_ghost.y = state->y;
+
+                        // simple reconciliation
+                        float dist = Vector2Distance(my_pos, my_server_ghost);
+                        if(dist > 20.0f) {
+                            printf("Snap! Drift was: %f\n", dist);
+                            my_pos = my_server_ghost;
+                        }
+                    }
+                    else {
+                        other_players[id].active = 1;
+                        other_players[id].pos.x = state->x;
+                        other_players[id].pos.y = state->y;
                     }
                 }
 
                 if (in_header.type == PACKET_PING) {
-                    clock_t end_time = clock();
-
                     ping_t* recv_p = (ping_t*)net_buffer;
-
-                    rtt_seconds = (double)(end_time - recv_p->time) / CLOCKS_PER_SEC;
-
+                    rtt_seconds = (double)(clock() - recv_p->time) / CLOCKS_PER_SEC;
                 }
             }
         }
@@ -160,15 +196,26 @@ int main(int argc, char *argv[])
         );
 
         DrawRectangleV(
-            server_pos,
+            my_server_ghost,
             (Vector2) {PLAYER_SIZE, PLAYER_SIZE},
             ghost_color
         );
         DrawRectangleV(
             my_pos,
-            (Vector2) {PLAYER_SIZE, PLAYER_SIZE}, 
+            (Vector2) {PLAYER_SIZE, PLAYER_SIZE},
             my_color
         );
+
+        for(int i = 0; i < MAX_PLAYERS; ++i) {
+            if(other_players[i].active && i != my_entindex) {
+                DrawRectangleV(
+                    other_players[i].pos,
+                    (Vector2){PLAYER_SIZE, PLAYER_SIZE},
+                    others_color
+                );
+                DrawText(TextFormat("%d", i), other_players[i].pos.x, other_players[i].pos.y - 20, 20, WHITE);
+            }
+        }
 
         EndDrawing();
     }
