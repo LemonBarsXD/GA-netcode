@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <raylib.h>
 #include <raymath.h>
+
 #include "network.h"
 #include "packet.h"
+#include "cfg.h"
 
 #define SCREEN_WIDTH 1000
 #define SCREEN_HEIGHT 800
@@ -12,7 +14,6 @@
 
 #define PING_INTERVAL 1.0f
 
-#define MAX_PLAYERS 6
 
 // simple struct to track everyone else
 typedef struct {
@@ -51,8 +52,11 @@ int main(int argc, char *argv[])
     uint64_t client_tick = 0;
     uint8_t net_buffer[1024];
 
+    uint8_t client_recv_buf[4096];
+    size_t client_recv_buf_len = 0;
+
     float ping_timer = 0.0f;
-    double rtt_seconds = 0;
+    double rtt_ms = 0;
 
     while(!WindowShouldClose()) {
 
@@ -130,43 +134,75 @@ int main(int argc, char *argv[])
                     &in_header,
                     net_buffer,
                     1024
-                )
+                ) == 1
             )
             {
-                if (in_header.type == PACKET_CONNECT) {
-                    net_handshake_t* hs = (net_handshake_t*)net_buffer;
-                    printf("Handshake comlete! \nMy ID: %d \nGame version: %d", hs->entindex, hs->version);
-                    my_entindex = hs->entindex;
-                }
+                switch(in_header.type) {
+                    case PACKET_CONNECT:
+                        {
+                            net_handshake_t* hs = (net_handshake_t*)net_buffer;
+                            printf(
+                                "Handshake comlete! \nMy ID: %d \nGame version: %d\n",
+                                hs->entindex,
+                                hs->version
+                            );
+                            my_entindex = hs->entindex;
 
-                if (in_header.type == PACKET_STATE) {
-                    server_state_t* state = (server_state_t*)net_buffer;
-
-                    int id = state->entindex;
-
-                    if (id < 0 || id >= MAX_PLAYERS) continue;
-
-                    if(id == my_entindex) {
-                        my_server_ghost.x = state->x;
-                        my_server_ghost.y = state->y;
-
-                        // simple reconciliation
-                        float dist = Vector2Distance(my_pos, my_server_ghost);
-                        if(dist > 20.0f) {
-                            printf("Snap! Drift was: %f\n", dist);
-                            my_pos = my_server_ghost;
+                            for(int i = 0; i < MAX_PLAYERS; ++i) {
+                                server_state_t state = hs->clients[i].state;
+                                uint32_t id = hs->clients[i].state.entindex;
+                                other_players[id].active = 1;
+                                other_players[id].pos.x = state.x;
+                                other_players[id].pos.y = state.y;
+                            }
+                            break;
                         }
-                    }
-                    else {
-                        other_players[id].active = 1;
-                        other_players[id].pos.x = state->x;
-                        other_players[id].pos.y = state->y;
-                    }
-                }
 
-                if (in_header.type == PACKET_PING) {
-                    ping_t* recv_p = (ping_t*)net_buffer;
-                    rtt_seconds = (double)(clock() - recv_p->time) / CLOCKS_PER_SEC;
+                    case PACKET_DISCONNECT:
+                        {
+                            net_disconnect_t* dc = (net_disconnect_t*)net_buffer;
+                            printf("Client %d disconnected! (%d)\n", dc->entindex, dc->reason);
+                            if(dc->entindex < MAX_PLAYERS) {
+                                other_players[dc->entindex].active = 0;
+                            }
+                            break;
+                        }
+
+                    case PACKET_STATE:
+                        {
+                            server_state_t* state = (server_state_t*)net_buffer;
+
+                            int id = state->entindex;
+
+                            if (id < 0 || id >= MAX_PLAYERS) continue;
+
+                            if(id == my_entindex) {
+                                my_server_ghost.x = state->x;
+                                my_server_ghost.y = state->y;
+
+                                // simple reconciliation
+                                float dist = Vector2Distance(my_pos, my_server_ghost);
+                                if(dist > 20.0f) {
+                                    printf("Reconciliation to: %f\n", dist);
+                                    my_pos = my_server_ghost;
+                                }
+                            }
+                            else {
+                                other_players[id].active = 1;
+                                other_players[id].pos.x = state->x;
+                                other_players[id].pos.y = state->y;
+                            }
+                            break;
+                        }
+
+                    case PACKET_PING:
+                        {
+                            ping_t* recv_p = (ping_t*)net_buffer;
+                            struct timespec now;
+                            clock_gettime(CLOCK_MONOTONIC, &now);
+                            uint64_t current_time_ns = TIMESPEC_TO_NSEC(now);
+                            break;
+                        }
                 }
             }
         }
@@ -188,7 +224,7 @@ int main(int argc, char *argv[])
         DrawText(
             TextFormat(
                 "Ping: %.3f ms",
-                rtt_seconds * 1000),
+                rtt_ms),
             10,
             30,
             20,
@@ -219,6 +255,9 @@ int main(int argc, char *argv[])
 
         EndDrawing();
     }
+
+
+    Net_SendPacket(net_fd, PACKET_DISCONNECT, NULL, 0);
 
     if (net_fd != -1) {
         Net_Close(net_fd);
