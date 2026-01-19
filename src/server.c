@@ -132,8 +132,18 @@ int main() {
                     case PACKET_CONNECT:
                         {
                             printf("Client %d requesting handshake...\n", clients[i].fd);
-                            net_handshake_t resp_hs = {.entindex = i, .version = VERSION, .clients=clients};
+
+                            net_handshake_t resp_hs = {.entindex = i, .version = VERSION,};
                             Net_SendPacket(clients[i].fd, PACKET_CONNECT, &resp_hs, sizeof(resp_hs));
+
+                            sv_full_state_t full_state;
+                            for(int j = 0; j < MAX_PLAYERS; ++j) {
+                                if(clients[j].active) {
+                                    full_state.states[j] = clients[j].state;
+                                }
+                            }
+                            Net_SendPacket(clients[i].fd, PACKET_FULL_STATE, &full_state, sizeof(full_state));
+
                             Net_Broadcast(
                                 clients,
                                 MAX_PLAYERS,
@@ -183,7 +193,7 @@ int main() {
                             clock_gettime(CLOCK_MONOTONIC, &now);
                             uint64_t time_t = TIMESPEC_TO_NSEC(now);
                             uint64_t diff_t = time_t - recv_ping->time;
-                            ping_t resp_ping = {.diff = diff_t, .time = time_t};
+                            ping_t resp_ping = {.diff = diff_t, .time = recv_ping->time};
                             Net_SendPacket(clients[i].fd, PACKET_PING, &resp_ping, sizeof(resp_ping));
                             break;
                         }
@@ -193,7 +203,7 @@ int main() {
                             printf("Client disconnected by packet: %d\n", clients[i].fd);
                             clients[i].active = 0;
                             net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=1};
-                            Net_Broadcast(clients, MAX_PLAYERS, PACKET_DISCONNECT, 0, &dc, sizeof(dc));
+                            Net_Broadcast(clients, MAX_PLAYERS, 0, PACKET_DISCONNECT, &dc, sizeof(dc));
                             Net_Close(clients[i].fd);
                             break;
                         }

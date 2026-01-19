@@ -113,8 +113,8 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
     // -2  = header only (need more data next time)
     // < -2 = various errors
 
-    uint8_t buf = client->recv_buf;
-    size_t* len = &client->recv_buf_len;
+    uint8_t* buf = client->recv_buf;
+    size_t*  len = &client->recv_buf_len;
 
     while(1) {
         if(*len < sizeof(header_t)) {

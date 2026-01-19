@@ -1,6 +1,6 @@
 CC = gcc
 VPATH = src
-CFLAGS = -Wextra -std=c99 -Isrc
+CFLAGS = -Wextra -std=gnu99 -Isrc
 
 BIN_PATH = bin/
 

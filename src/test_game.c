@@ -39,10 +39,12 @@ int main(int argc, char *argv[])
         );
     }
 
+
+    client_t my_client = {.state.entindex=-1, .active=1};
+
     Vector2 my_pos = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2 };
     Vector2 my_server_ghost = my_pos;
     remote_player_t other_players[MAX_PLAYERS] = {0};
-    int my_entindex = -1;
 
     Color my_color = { 255, 255, 255, 100 };
     Color ghost_color = { 255, 0, 0, 100 };
@@ -130,7 +132,7 @@ int main(int argc, char *argv[])
             header_t in_header;
             while(
                 Net_ReceivePacket(
-                    net_fd,
+                    &my_client,
                     &in_header,
                     net_buffer,
                     1024
@@ -146,15 +148,7 @@ int main(int argc, char *argv[])
                                 hs->entindex,
                                 hs->version
                             );
-                            my_entindex = hs->entindex;
-
-                            for(int i = 0; i < MAX_PLAYERS; ++i) {
-                                server_state_t state = hs->clients[i].state;
-                                uint32_t id = hs->clients[i].state.entindex;
-                                other_players[id].active = 1;
-                                other_players[id].pos.x = state.x;
-                                other_players[id].pos.y = state.y;
-                            }
+                            my_client.state.entindex = hs->entindex;
                             break;
                         }
 
@@ -170,13 +164,13 @@ int main(int argc, char *argv[])
 
                     case PACKET_STATE:
                         {
-                            server_state_t* state = (server_state_t*)net_buffer;
+                            sv_state_t* state = (sv_state_t*)net_buffer;
 
-                            int id = state->entindex;
+                            int id = (int)state->entindex;
 
                             if (id < 0 || id >= MAX_PLAYERS) continue;
 
-                            if(id == my_entindex) {
+                            if(id == (int)my_client.state.entindex) {
                                 my_server_ghost.x = state->x;
                                 my_server_ghost.y = state->y;
 
@@ -195,12 +189,44 @@ int main(int argc, char *argv[])
                             break;
                         }
 
+                    case PACKET_FULL_STATE:
+                        {
+                            sv_full_state_t* full_state = (sv_full_state_t*)net_buffer;
+
+
+                            for(int i = 0; i < MAX_PLAYERS; ++i) {
+
+                                int id = full_state->states[i].entindex;
+
+                                if (id < 0 || id >= MAX_PLAYERS) continue;
+
+                                if(id == (int)my_client.state.entindex) {
+                                    my_server_ghost.x = full_state->states[i].x;
+                                    my_server_ghost.y = full_state->states[i].y;
+
+                                    // simple reconciliation
+                                    float dist = Vector2Distance(my_pos, my_server_ghost);
+                                    if(dist > 20.0f) {
+                                        printf("Reconciliation to: %f\n", dist);
+                                        my_pos = my_server_ghost;
+                                    }
+                                }
+                                else {
+                                    other_players[id].active = 1;
+                                    other_players[id].pos.x = full_state->states[i].x;
+                                    other_players[id].pos.y = full_state->states[i].y;
+                                }
+                            }
+                            break;
+                        }
+
                     case PACKET_PING:
                         {
                             ping_t* recv_p = (ping_t*)net_buffer;
                             struct timespec now;
                             clock_gettime(CLOCK_MONOTONIC, &now);
                             uint64_t current_time_ns = TIMESPEC_TO_NSEC(now);
+                            rtt_ms = (current_time_ns - recv_p->time) / 1000000;
                             break;
                         }
                 }
@@ -243,7 +269,7 @@ int main(int argc, char *argv[])
         );
 
         for(int i = 0; i < MAX_PLAYERS; ++i) {
-            if(other_players[i].active && i != my_entindex) {
+            if(other_players[i].active && i != (int)my_client.state.entindex) {
                 DrawRectangleV(
                     other_players[i].pos,
                     (Vector2){PLAYER_SIZE, PLAYER_SIZE},

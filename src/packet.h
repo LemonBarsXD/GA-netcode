@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "cfg.h"
+
 // time macros
 #define NS_PER_SEC 1000000000ULL
 #define TIMESPEC_TO_NSEC(ts) \
@@ -48,7 +50,12 @@ typedef struct {
     float x;
     float y;
     float z;
-} server_state_t;
+} sv_state_t;
+
+typedef struct {
+    sv_state_t states[MAX_PLAYERS];
+    uint32_t active_mask;
+} sv_full_state_t;
 
 typedef struct {
     uint64_t tick_number;
@@ -58,10 +65,9 @@ typedef struct {
 } user_cmd_t;
 
 typedef struct {
-    server_state_t state;
-    user_cmd_t* cmdqueue;       // for per-client buffering
-    uint8_t recv_buf[4096];     // --||--
-    size_t recv_buf_len;        // --||--
+    sv_state_t state;
+    uint8_t recv_buf[4096];
+    size_t recv_buf_len;
     int fd;
     int active;
 } client_t;
@@ -72,7 +78,6 @@ typedef struct {
 } ping_t;
 
 typedef struct {
-    client_t* clients;
     uint32_t  entindex;
     uint32_t  version;
 } net_handshake_t;
