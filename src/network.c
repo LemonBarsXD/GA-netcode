@@ -12,8 +12,12 @@
 
 
 int
-Net_Ping(int fd)
+net_ping(int fd)
 {
+    // returns:
+    // 0  = success
+    // -1 = failure/error
+
     if(fd < 0) {
         return -1;
     }
@@ -23,14 +27,49 @@ Net_Ping(int fd)
 
     ping_t p = {.diff=0, .time=TIMESPEC_TO_NSEC(now)};
 
-    Net_SendPacket(fd, PACKET_PING, &p, sizeof(p));
+    net_sendpacket(fd, PACKET_PING, &p, sizeof(p));
 
     return 0;
 }
 
 int
-Net_InitClient(const char* ip, int port)
+net_initserver(int port)
 {
+    // returns:
+    // > 0 = server fd
+    // -1  = failure/error
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_addr.s_addr = INADDR_ANY,
+        .sin_port = htons(port)
+    };
+
+    // allow port reuse
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        perror("bind failed");
+        return -1;
+    }
+
+    if(listen(fd, 1) == -1) {
+        perror("listen failed");
+        return -1;
+    }
+
+    return fd;
+}
+
+int
+net_initclient(const char* ip, int port)
+{
+    // returns:
+    // > 0 = client fd
+    // -1  = failure/error
+
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         perror("socket error");
@@ -44,8 +83,8 @@ Net_InitClient(const char* ip, int port)
         return -1;
     }
 
-    int flag = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+    int opt = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&opt, sizeof(opt));
 
     if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         perror("connect error");
@@ -59,7 +98,12 @@ Net_InitClient(const char* ip, int port)
 }
 
 int
-Net_Send(int fd, void* data, uint16_t size) {
+net_send(int fd, void* data, uint16_t size) 
+{
+    // returns:
+    // 0  = success
+    // -1 = failure/error
+
     uint8_t* ptr = (uint8_t*)data;
     uint16_t bytes_sent = 0;
 
@@ -73,16 +117,20 @@ Net_Send(int fd, void* data, uint16_t size) {
 }
 
 int
-Net_SendPacket(int fd, uint8_t type, void* data, uint16_t size)
+net_sendpacket(int fd, uint8_t type, void* data, uint16_t size)
 {
+    // returns:
+    // 0  = success
+    // -1 = failure/error
+
     header_t h = {.type=type, .data_size=size};
 
-    if (Net_Send(fd, &h, sizeof(h)) == -1) {
+    if (net_send(fd, &h, sizeof(h)) == -1) {
         return -1;
     }
 
     if (size > 0 && data != NULL) {
-        if (Net_Send(fd, data, size) == -1) {
+        if (net_send(fd, data, size) == -1) {
             return -1;
         }
     }
@@ -90,14 +138,18 @@ Net_SendPacket(int fd, uint8_t type, void* data, uint16_t size)
 }
 
 int
-Net_Broadcast(client_t* clients, int amount, int fd_exclude, uint8_t type, void* buffer, uint16_t size)
+net_broadcast(client_t* clients, int amount, int fd_exclude, uint8_t type, void* buffer, uint16_t size)
 {
+    // returns:
+    // > 0 = amount of packets sent to active clients
+    // -1  = there is no amount
+
     if(amount <= 0) return -1;
 
     int count = 0;
     for(int i = 0; i < amount; ++i) {
         if(clients[i].active && clients[i].fd != fd_exclude) {
-            if(Net_SendPacket(clients[i].fd, type, buffer, size) != -1){
+            if(net_sendpacket(clients[i].fd, type, buffer, size) != -1){
                 count++;
             } else {
                 printf("Broadcast FD %d: send failed: %s", clients[i].fd, strerror(errno));
@@ -108,14 +160,14 @@ Net_Broadcast(client_t* clients, int amount, int fd_exclude, uint8_t type, void*
 }
 
 int
-Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer, int max_buffer_size)
+net_recvpacket(client_t* client, header_t* out_header, void* out_data_buffer, int max_buffer_size)
 {
     // returns:
     //  1  = complete packet received
     //  0  = nothing / would block
     // -1  = disconnect / EOF
     // -2  = header only (need more data next time)
-    // < -2 = various errors
+    // < -2 = various errors (-errno-4)
 
     uint8_t* buf = client->recv_buf;
     size_t*  len = &client->recv_buf_len;
@@ -123,6 +175,7 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
     while(1) {
         if(*len < sizeof(header_t)) {
             int r = recv(client->fd, buf + *len, sizeof(header_t) - *len, 0);
+            // printf("header recv on fd %d → %d bytes (len now %zu)\n", client->fd, r, *len);
             if(r == 0) return -1;
             if(r < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
@@ -136,7 +189,6 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
         header_t temp_header;
         memcpy(&temp_header, buf, sizeof(header_t));
 
-        // Inside the while, after peeking temp_header
         switch(temp_header.type) {
             case PACKET_CONNECT: {
                 if(temp_header.data_size != sizeof(net_handshake_t)) return -2;
@@ -176,10 +228,12 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
 
         if (*len < total_needed) {
             ssize_t r = recv(client->fd, buf + *len, total_needed - *len, 0);
+            //printf("payload recv on fd %d → %d bytes (total len %zu/%zu)\n",
+            //       client->fd, r, *len, total_needed);
             if (r == 0) return -1;
             if (r < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
-                return -errno-4; // align again
+                return -errno-4; // align
             }
             *len += r;
             if (*len < total_needed) return 0;
@@ -198,7 +252,7 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
 }
 
 void
-Net_Close(int fd)
+net_close(int fd)
 {
     if(close(fd) == -1) {
         printf("FD %d: close failed: %s", fd, strerror(errno));

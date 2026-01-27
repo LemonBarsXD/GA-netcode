@@ -1,10 +1,10 @@
 CC = gcc
 VPATH = src
-CFLAGS = -Wextra -std=gnu99 -Isrc
+CFLAGS = -Wextra -std=gnu99 -Isrc -Ipthread -lGL -ldl
 
 BIN_PATH = bin/
 
-SHARED_SRC = network.c
+SHARED_SRC = network.c client.c
 SERVER_SRC = server.c
 SERVER_OUT = server
 

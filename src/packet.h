@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <time.h>
+#include <pthread.h> // for future multithreading
 
 #include "cfg.h"
 
@@ -68,8 +69,10 @@ typedef struct {
 typedef struct {
     uint8_t recv_buf[4096];
     size_t recv_buf_len;
-    user_cmd_t cmdqueue[64];
-    int cmdqueue_len;
+    user_cmd_t cmdqueue[TICK_RATE];
+    size_t cmdqueue_len;
+    size_t cmd_head;
+    pthread_mutex_t cmd_mutex; // for future multithreading
     sv_state_t state;
     int fd;
     int active;

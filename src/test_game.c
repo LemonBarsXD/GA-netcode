@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, argv[0]);
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
 
-    int net_fd = Net_InitClient("127.0.0.1", 21337);
+    int net_fd = net_initclient("127.0.0.1", 21337);
     if (net_fd == -1) {
         printf("Failed to connect, is the server running? :-)\n");
     }
@@ -36,12 +36,13 @@ int main(int argc, char *argv[])
     printf("Connected! Sending connect packet...\n");
     net_handshake_t hs = {0};
     hs.version = VERSION;
-    Net_SendPacket(
+    net_sendpacket(
         net_fd,
         PACKET_CONNECT,
         &hs,
         sizeof(hs)
     );
+    printf("Connect packet sent (%zu bytes)\n", sizeof(net_handshake_t) + sizeof(header_t));
 
     client_t my_client = {
         .state.entindex=-1,
@@ -80,7 +81,7 @@ int main(int argc, char *argv[])
         // ping the server
         if (ping_timer >= PING_INTERVAL) {
             // printf("pinging...\n");
-            Net_Ping(net_fd);
+            net_ping(net_fd);
 
             ping_timer -= PING_INTERVAL;
         }
@@ -117,7 +118,7 @@ int main(int argc, char *argv[])
             }
 
             // send packet
-            Net_SendPacket(
+            net_sendpacket(
                 net_fd,
                 PACKET_USERINPUT,
                 &cmd,
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
             header_t in_header;
             int res;
 
-            while(res = Net_ReceivePacket(&my_client, &in_header, net_buffer, 1024) == 1) {
+            while((res = net_recvpacket(&my_client, &in_header, net_buffer, 1024)) == 1) {
                 if(in_header.type != PACKET_FULL_STATE) {
                     printf("packet received: %d\n", in_header.type);
                 }
@@ -290,11 +291,11 @@ int main(int argc, char *argv[])
     }
 
     net_disconnect_t dc = {.entindex=my_client.state.entindex, .reason=1};
-    Net_SendPacket(net_fd, PACKET_DISCONNECT, &dc, sizeof(dc));
+    net_sendpacket(net_fd, PACKET_DISCONNECT, &dc, sizeof(dc));
     usleep(10000);
 
     if (net_fd != -1) {
-        Net_Close(net_fd);
+        net_close(net_fd);
     }
     CloseWindow();
     return 0;
