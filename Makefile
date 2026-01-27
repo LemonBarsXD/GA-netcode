@@ -12,13 +12,16 @@ GAME_SRC = test_game.c
 GAME_OUT = game
 GAME_LIBS = -lraylib -lm
 
-all: server game
+all: bin server game
 
 server: $(SERVER_SRC) $(SHARED_SRC)
 	$(CC) $^ -o $(BIN_PATH)$(SERVER_OUT) $(CFLAGS)
 
 game: $(GAME_SRC) $(SHARED_SRC)
 	$(CC) $^ -o $(BIN_PATH)$(GAME_OUT) $(CFLAGS) $(GAME_LIBS)
+
+bin:
+	@mkdir -p $(BIN_DIR)
 
 clean:
 	rm -f $(SERVER_OUT) $(GAME_OUT)
