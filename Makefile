@@ -21,7 +21,7 @@ game: $(GAME_SRC) $(SHARED_SRC)
 	$(CC) $^ -o $(BIN_PATH)$(GAME_OUT) $(CFLAGS) $(GAME_LIBS)
 
 bin:
-	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(BIN_PATH)
 
 clean:
 	rm -f $(SERVER_OUT) $(GAME_OUT)
