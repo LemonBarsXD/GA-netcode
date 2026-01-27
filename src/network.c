@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <errno.h>
 
@@ -43,6 +44,9 @@ Net_InitClient(const char* ip, int port)
         return -1;
     }
 
+    int flag = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+
     if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         perror("connect error");
         return -1;
@@ -57,12 +61,12 @@ Net_InitClient(const char* ip, int port)
 int
 Net_Send(int fd, void* data, uint16_t size) {
     uint8_t* ptr = (uint8_t*)data;
-    uint16_t sent = 0;
+    uint16_t bytes_sent = 0;
 
-    while (sent < size) {
-        int s = send(fd, ptr + sent, size - sent, 0);
-        if (s == -1) return -1;
-        sent += s;
+    while (bytes_sent < size) {
+        int sent = send(fd, ptr + bytes_sent, size - bytes_sent, 0);
+        if (sent == -1) return -1;
+        bytes_sent += sent;
     }
 
     return 0;
@@ -131,6 +135,38 @@ Net_ReceivePacket(client_t* client, header_t* out_header, void* out_data_buffer,
 
         header_t temp_header;
         memcpy(&temp_header, buf, sizeof(header_t));
+
+        // Inside the while, after peeking temp_header
+        switch(temp_header.type) {
+            case PACKET_CONNECT: {
+                if(temp_header.data_size != sizeof(net_handshake_t)) return -2;
+                break;
+            }
+            case PACKET_USERINPUT: {
+                if(temp_header.data_size != sizeof(user_cmd_t)) return -2;
+                break;
+            }
+            case PACKET_PING: {
+                if(temp_header.data_size != sizeof(ping_t)) return -2;
+                break;
+            }
+            case PACKET_DISCONNECT: {
+                if(temp_header.data_size != sizeof(net_disconnect_t)) return -2;
+                break;
+            }
+            case PACKET_STATE: {
+                if(temp_header.data_size != sizeof(sv_state_t)) return -2;
+                break;
+            }
+            case PACKET_FULL_STATE: {
+                if(temp_header.data_size != sizeof(sv_full_state_t)) return -2;
+                break;
+            }
+            default: {
+                return -2;
+                break;
+            }
+        }
 
         size_t total_needed = sizeof(header_t) + temp_header.data_size;
         if (temp_header.data_size > max_buffer_size) {

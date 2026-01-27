@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <raylib.h>
 #include <raymath.h>
 
@@ -29,18 +30,25 @@ int main(int argc, char *argv[])
 
     int net_fd = Net_InitClient("127.0.0.1", 21337);
     if (net_fd == -1) {
-        printf("failed to connect, is the server running? :-)\n");
-    } else {
-        Net_SendPacket(
-            net_fd,
-            PACKET_CONNECT,
-            NULL,
-            0
-        );
+        printf("Failed to connect, is the server running? :-)\n");
     }
 
+    printf("Connected! Sending connect packet...\n");
+    net_handshake_t hs = {0};
+    hs.version = VERSION;
+    Net_SendPacket(
+        net_fd,
+        PACKET_CONNECT,
+        &hs,
+        sizeof(hs)
+    );
 
-    client_t my_client = {.state.entindex=-1, .active=1};
+    client_t my_client = {
+        .state.entindex=-1,
+        .active=1,
+        .fd=net_fd,
+        .recv_buf_len = 0
+    };
 
     Vector2 my_pos = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2 };
     Vector2 my_server_ghost = my_pos;
@@ -53,9 +61,6 @@ int main(int argc, char *argv[])
     double accumulator = 0.0;
     uint64_t client_tick = 0;
     uint8_t net_buffer[1024];
-
-    uint8_t client_recv_buf[4096];
-    size_t client_recv_buf_len = 0;
 
     float ping_timer = 0.0f;
     double rtt_ms = 0;
@@ -112,14 +117,12 @@ int main(int argc, char *argv[])
             }
 
             // send packet
-            if(net_fd != 0) {
-               Net_SendPacket(
-                    net_fd,
-                    PACKET_USERINPUT,
-                    &cmd,
-                    sizeof(cmd)
-                );
-            }
+            Net_SendPacket(
+                net_fd,
+                PACKET_USERINPUT,
+                &cmd,
+                sizeof(cmd)
+            );
 
             // decrease accumulator
             accumulator -= TICK_DELTA;
@@ -130,25 +133,24 @@ int main(int argc, char *argv[])
 
             // handle incoming packets
             header_t in_header;
-            while(
-                Net_ReceivePacket(
-                    &my_client,
-                    &in_header,
-                    net_buffer,
-                    1024
-                ) == 1
-            )
-            {
+            int res;
+
+            while(res = Net_ReceivePacket(&my_client, &in_header, net_buffer, 1024) == 1) {
+                if(in_header.type != PACKET_FULL_STATE) {
+                    printf("packet received: %d\n", in_header.type);
+                }
                 switch(in_header.type) {
                     case PACKET_CONNECT:
                         {
-                            net_handshake_t* hs = (net_handshake_t*)net_buffer;
-                            printf(
-                                "Handshake comlete! \nMy ID: %d \nGame version: %d\n",
-                                hs->entindex,
-                                hs->version
-                            );
-                            my_client.state.entindex = hs->entindex;
+                            if(in_header.data_size == sizeof(net_handshake_t)) {
+                                net_handshake_t* hs = (net_handshake_t*)net_buffer;
+                                my_client.state.entindex = hs->entindex;
+                                printf(
+                                    "Handshake comlete! \nMy ID: %d \nGame version: %d\n",
+                                    hs->entindex,
+                                    hs->version
+                                );
+                            }
                             break;
                         }
 
@@ -194,7 +196,7 @@ int main(int argc, char *argv[])
                             sv_full_state_t* full_state = (sv_full_state_t*)net_buffer;
 
 
-                            for(int i = 0; i < MAX_PLAYERS; ++i) {
+                            for(int i = 0; i < (int)full_state->num_states; ++i) {
 
                                 int id = full_state->states[i].entindex;
 
@@ -226,9 +228,14 @@ int main(int argc, char *argv[])
                             struct timespec now;
                             clock_gettime(CLOCK_MONOTONIC, &now);
                             uint64_t current_time_ns = TIMESPEC_TO_NSEC(now);
-                            rtt_ms = (current_time_ns - recv_p->time) / 1000000;
+                            rtt_ms = (current_time_ns - recv_p->time) / 1000000.0f;
                             break;
                         }
+                }
+
+                if (res == -1 || res == -2) {
+                    printf("Server disconnected (error/invalid packet)\n");
+                    break;
                 }
             }
         }
@@ -282,8 +289,9 @@ int main(int argc, char *argv[])
         EndDrawing();
     }
 
-
-    Net_SendPacket(net_fd, PACKET_DISCONNECT, NULL, 0);
+    net_disconnect_t dc = {.entindex=my_client.state.entindex, .reason=1};
+    Net_SendPacket(net_fd, PACKET_DISCONNECT, &dc, sizeof(dc));
+    usleep(10000);
 
     if (net_fd != -1) {
         Net_Close(net_fd);

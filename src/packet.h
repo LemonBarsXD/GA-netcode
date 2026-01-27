@@ -10,6 +10,7 @@
 #include "cfg.h"
 
 // time macros
+#define US_PER_SEC 1000000ULL
 #define NS_PER_SEC 1000000000ULL
 #define TIMESPEC_TO_NSEC(ts) \
     ((uint64_t)(ts).tv_sec * NS_PER_SEC + (uint64_t)(ts).tv_nsec)
@@ -53,8 +54,8 @@ typedef struct {
 } sv_state_t;
 
 typedef struct {
+    uint32_t num_states;
     sv_state_t states[MAX_PLAYERS];
-    uint32_t active_mask;
 } sv_full_state_t;
 
 typedef struct {
@@ -65,9 +66,11 @@ typedef struct {
 } user_cmd_t;
 
 typedef struct {
-    sv_state_t state;
     uint8_t recv_buf[4096];
     size_t recv_buf_len;
+    user_cmd_t cmdqueue[64];
+    int cmdqueue_len;
+    sv_state_t state;
     int fd;
     int active;
 } client_t;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <arpa/inet.h>
@@ -12,7 +13,6 @@
 #include "cfg.h"
 
 #define PLAYER_SPEED 200.0f
-
 
 client_t clients[MAX_PLAYERS];
 
@@ -48,15 +48,21 @@ int main() {
     header_t in_header;
     uint8_t buffer[2048];
 
-    int ret_val = 0;
+    double accumulator = 0.0;
+
+    struct timeval prev_tv;
+    gettimeofday(&prev_tv, NULL);
 
     while(1) {
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        double dt = (now.tv_sec - prev_tv.tv_sec) + (double)(now.tv_usec - prev_tv.tv_usec) / 1000000.0f;
+        accumulator += dt;
+        prev_tv = now;
 
-        // define and zero file descriptors
         fd_set readfds;
         FD_ZERO(&readfds);
 
-        // add listener
         FD_SET(listen_fd, &readfds);
         int max_fd = listen_fd;
 
@@ -69,8 +75,7 @@ int main() {
             }
         }
 
-        struct timeval timeout = {.tv_sec=0, .tv_usec=TICK_DELTA*NS_PER_SEC/1000}; // to microseconds
-        if (select(max_fd + 1, &readfds, NULL, NULL, &timeout) == -1) {
+        if (select(max_fd + 1, &readfds, NULL, NULL, NULL) == -1) {
             perror("select failed, continuing...");
             continue;
         }
@@ -113,102 +118,121 @@ int main() {
         for(int i = 0; i < MAX_PLAYERS; ++i) {
             if(clients[i].active && FD_ISSET(clients[i].fd, &readfds)) {
 
-                int res = Net_ReceivePacket(&clients[i], &in_header, buffer, 2048);
+                int res = Net_ReceivePacket(&clients[i], &in_header, buffer, sizeof(buffer));
+                if(res == 1) {
+                    if(in_header.type != PACKET_USERINPUT) {
+                        printf("packet received: %d\n", in_header.type);
+                    }
+                    switch(in_header.type) {
+                        case PACKET_CONNECT:
+                            {
+                                net_handshake_t* req_hs = (net_handshake_t*)buffer;
+                                net_handshake_t hs = {.entindex = clients[i].state.entindex, .version = VERSION};
+                                Net_SendPacket(clients[i].fd, PACKET_CONNECT, &hs, sizeof(hs));
+                                printf("Client %d connected with version %d\n", clients[i].fd, req_hs->version);
 
-                if(res == -1) {
-                    printf("Client %d closed connection!\n", clients[i].state.entindex);
-                    net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=0};
-                    Net_Broadcast(clients, MAX_PLAYERS, PACKET_DISCONNECT, 0, &dc, sizeof(dc));
-                    Net_Close(clients[i].fd);
-                }
-                else if (res != 1 && res != 0) {
-                    printf("Client %d error: %s\n", clients[i].state.entindex, strerror(res));
-                    net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=res};
-                    Net_Broadcast(clients, MAX_PLAYERS, PACKET_DISCONNECT, 0, &dc, sizeof(dc));
-                    Net_Close(clients[i].fd);
-                }
+                                // broadcast new client to others
+                                Net_Broadcast(
+                                    clients,
+                                    MAX_PLAYERS,
+                                    clients[i].fd,
+                                    PACKET_STATE,
+                                    &clients[i].state,
+                                    sizeof(clients[i].state)
+                                );
 
-                switch (in_header.type) {
-                    case PACKET_CONNECT:
-                        {
-                            printf("Client %d requesting handshake...\n", clients[i].fd);
-
-                            net_handshake_t resp_hs = {.entindex = i, .version = VERSION,};
-                            Net_SendPacket(clients[i].fd, PACKET_CONNECT, &resp_hs, sizeof(resp_hs));
-
-                            sv_full_state_t full_state;
-                            for(int j = 0; j < MAX_PLAYERS; ++j) {
-                                if(clients[j].active) {
-                                    full_state.states[j] = clients[j].state;
-                                }
-                            }
-                            Net_SendPacket(clients[i].fd, PACKET_FULL_STATE, &full_state, sizeof(full_state));
-
-                            Net_Broadcast(
-                                clients,
-                                MAX_PLAYERS,
-                                PACKET_STATE,
-                                clients[i].fd,
-                                &clients[i].state,
-                                sizeof(clients[i].state)
-                            );
-                            break;
-                        }
-
-                    case PACKET_USERINPUT:
-                        {
-                            user_cmd_t* cmd = (user_cmd_t*)buffer;
-                            // calculate physics
-                            float move_amt = PLAYER_SPEED * TICK_DELTA;
-                            if (cmd->buttons & IN_FORWARD)  clients[i].state.y -= move_amt;
-                            if (cmd->buttons & IN_BACKWARD) clients[i].state.y += move_amt;
-                            if (cmd->buttons & IN_LEFT)     clients[i].state.x -= move_amt;
-                            if (cmd->buttons & IN_RIGHT)    clients[i].state.x += move_amt;
-                            clients[i].state.last_processed_tick = cmd->tick_number;
-
-                            // sending everyones data to everyone
-                            for(int l = 0; l < MAX_PLAYERS; ++l) {
-                                if(!clients[l].active) continue;
-
+                                // send full state to new client
+                                sv_full_state_t full_state = {0};
+                                int count = 0;
                                 for (int j = 0; j < MAX_PLAYERS; ++j) {
-                                    if(!clients[j].active) continue;
-
-                                    Net_SendPacket(
-                                        clients[l].fd,
-                                        PACKET_STATE,
-                                        &clients[j].state,
-                                        sizeof(clients[j].state)
-                                    );
+                                    if(clients[j].active && j != i) {
+                                        full_state.states[count] = clients[j].state;
+                                        count++;
+                                    }
                                 }
+                                full_state.num_states = count;
+                                Net_SendPacket(clients[i].fd, PACKET_FULL_STATE, &full_state, sizeof(full_state));
+
+                                break;
                             }
 
-                            break;
-                        }
+                        case PACKET_USERINPUT:
+                            {
+                                user_cmd_t* cmd = (user_cmd_t*)buffer;
+                                // calculate physics
+                                float move_amt = PLAYER_SPEED * TICK_DELTA;
+                                if (cmd->buttons & IN_FORWARD)  clients[i].state.y -= move_amt;
+                                if (cmd->buttons & IN_BACKWARD) clients[i].state.y += move_amt;
+                                if (cmd->buttons & IN_LEFT)     clients[i].state.x -= move_amt;
+                                if (cmd->buttons & IN_RIGHT)    clients[i].state.x += move_amt;
+                                clients[i].state.last_processed_tick = cmd->tick_number;
 
-                    case PACKET_PING:
-                        {
-                            ping_t* recv_ping = (ping_t*) buffer;
-                            // calculate time difference
-                            struct timespec now;
-                            clock_gettime(CLOCK_MONOTONIC, &now);
-                            uint64_t time_t = TIMESPEC_TO_NSEC(now);
-                            uint64_t diff_t = time_t - recv_ping->time;
-                            ping_t resp_ping = {.diff = diff_t, .time = recv_ping->time};
-                            Net_SendPacket(clients[i].fd, PACKET_PING, &resp_ping, sizeof(resp_ping));
-                            break;
-                        }
+                                break;
+                            }
 
-                    case PACKET_DISCONNECT:
-                        {
-                            printf("Client disconnected by packet: %d\n", clients[i].fd);
-                            clients[i].active = 0;
-                            net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=1};
-                            Net_Broadcast(clients, MAX_PLAYERS, 0, PACKET_DISCONNECT, &dc, sizeof(dc));
-                            Net_Close(clients[i].fd);
-                            break;
-                        }
+                        case PACKET_PING:
+                            {
+                                ping_t* recv_ping = (ping_t*) buffer;
+                                // calculate time difference
+                                struct timespec now;
+                                clock_gettime(CLOCK_MONOTONIC, &now);
+                                uint64_t time_t = TIMESPEC_TO_NSEC(now);
+                                uint64_t diff_t = time_t - recv_ping->time;
+                                ping_t resp_ping = {.diff = diff_t, .time = recv_ping->time};
+                                Net_SendPacket(clients[i].fd, PACKET_PING, &resp_ping, sizeof(resp_ping));
+                                break;
+                            }
+
+                        case PACKET_DISCONNECT:
+                            {
+                                printf("Client disconnected by packet: %d\n", clients[i].fd);
+                                clients[i].active = 0;
+                                net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=1};
+                                Net_Broadcast(
+                                    clients,
+                                    MAX_PLAYERS,
+                                    clients[i].fd,
+                                    PACKET_DISCONNECT,
+                                    &dc,
+                                    sizeof(dc)
+                                );
+                                Net_Close(clients[i].fd);
+                                break;
+                            }
+                    }
+                } else if (res == -1 || res == -2) {
+                    printf("Client disconnected (error/invalid packet): %d\n", clients[i].fd);
+                    net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=2};
+                    Net_Broadcast(
+                        clients,
+                        MAX_PLAYERS,
+                        clients[i].fd,
+                        PACKET_DISCONNECT,
+                        &dc,
+                        sizeof(dc)
+                    );
+                    clients[i].active = 0;
+                    Net_Close(clients[i].fd);
                 }
             }
+        }
+
+        // Process ticks
+        while (accumulator >= TICK_DELTA) {
+            // TODO: Process queued cmds here if implemented
+
+            // Broadcast full state to all
+            sv_full_state_t full_state = {0};
+            int count = 0;
+            for (int j = 0; j < MAX_PLAYERS; ++j) {
+                if (clients[j].active) {
+                    full_state.states[count] = clients[j].state;
+                    count++;
+                }
+            }
+            full_state.num_states = count;
+            Net_Broadcast(clients, MAX_PLAYERS, -1, PACKET_FULL_STATE, &full_state, sizeof(full_state));
+            accumulator -= TICK_DELTA;
         }
     }
 
