@@ -1,6 +1,6 @@
 CC = gcc
 VPATH = src
-CFLAGS = -Wextra -std=gnu99 -Isrc -Ipthread -lGL -ldl
+CFLAGS = -Wextra -std=gnu99 -Isrc -Ipthread -lGL -ldl -lm
 
 BIN_PATH = bin/
 
@@ -10,7 +10,7 @@ SERVER_OUT = server
 
 GAME_SRC = test_game.c
 GAME_OUT = game
-GAME_LIBS = -lraylib -lm
+GAME_LIBS = -lraylib
 
 all: bin server game
 

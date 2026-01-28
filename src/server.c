@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -13,7 +14,7 @@
 #include "client.h"
 #include "cfg.h"
 
-#define PLAYER_SPEED 200.0f
+#define PLAYER_SPEED 5.f
 
 client_t clients[MAX_PLAYERS];
 
@@ -72,8 +73,9 @@ void* svloop(void* arg) {
                         cl_initqueue(&clients[i]);
                         clients[i].fd = new_fd;
                         clients[i].active = 1;
-                        //clients[i].state.x = 500;
-                        //clients[i].state.y = 400;
+                        clients[i].state.x = 0;
+                        clients[i].state.y = 0;
+                        clients[i].state.z = 0.5f;
                         clients[i].state.entindex = (uint16_t)i;
                         clients[i].recv_buf_len = 0;
                         found_slot = 1;
@@ -103,9 +105,6 @@ void* svloop(void* arg) {
 
                 int res = net_recvpacket(&clients[i], &in_header, buffer, sizeof(buffer));
                 if(res == 1) {
-                    if(in_header.type != PACKET_USERINPUT) {
-                        printf("packet received: %d\n", in_header.type);
-                    }
                     switch(in_header.type) {
                         case PACKET_CONNECT:
                             {
@@ -244,12 +243,35 @@ int main() {
                 user_cmd_t cmd;
                 while(cl_popcmd(&clients[j], &cmd)) {
                     // calculate physics
+                    float yaw_rad = cmd.view_angle_yaw * (3.14159265f / 180.0f); // Deg2Rad
                     float move_amt = PLAYER_SPEED * TICK_DELTA;
-                    if (cmd.buttons & IN_FORWARD)  clients[j].state.y -= move_amt;
-                    if (cmd.buttons & IN_BACKWARD) clients[j].state.y += move_amt;
-                    if (cmd.buttons & IN_LEFT)     clients[j].state.x -= move_amt;
-                    if (cmd.buttons & IN_RIGHT)    clients[j].state.x += move_amt;
+
+                    float fwd_x = sinf(yaw_rad);
+                    float fwd_y = cosf(yaw_rad);
+
+                    float right_x = cosf(yaw_rad);
+                    float right_y = -sinf(yaw_rad);
+
+                    if (cmd.buttons & IN_FORWARD) {
+                        clients[j].state.x += fwd_x * move_amt;
+                        clients[j].state.y += fwd_y * move_amt;
+                    }
+                    if (cmd.buttons & IN_BACKWARD) {
+                        clients[j].state.x -= fwd_x * move_amt;
+                        clients[j].state.y -= fwd_y * move_amt;
+                    }
+                    if (cmd.buttons & IN_RIGHT) {
+                        clients[j].state.x += right_x * move_amt;
+                        clients[j].state.y += right_y * move_amt;
+                    }
+                    if (cmd.buttons & IN_LEFT) {
+                        clients[j].state.x -= right_x * move_amt;
+                        clients[j].state.y -= right_y * move_amt;
+                    }
+
                     clients[j].state.last_processed_tick = cmd.tick_number;
+                    clients[j].state.view_angle_yaw = cmd.view_angle_yaw;
+                    clients[j].state.view_angle_pitch = cmd.view_angle_pitch;
                 }
             }
 

@@ -49,6 +49,8 @@ typedef struct {
 typedef struct {
     uint64_t last_processed_tick; // for reconciliation
     uint32_t entindex;
+    float view_angle_yaw;
+    float view_angle_pitch;
     float x;
     float y;
     float z;

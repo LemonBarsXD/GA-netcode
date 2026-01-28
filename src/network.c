@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -123,7 +124,9 @@ net_sendpacket(int fd, uint8_t type, void* data, uint16_t size)
     // 0  = success
     // -1 = failure/error
 
-    header_t h = {.type=type, .data_size=size};
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    header_t h = {.type=type, .data_size=size, .timestamp=TIMESPEC_TO_NSEC(now)};
 
     if (net_send(fd, &h, sizeof(h)) == -1) {
         return -1;
@@ -134,6 +137,9 @@ net_sendpacket(int fd, uint8_t type, void* data, uint16_t size)
             return -1;
         }
     }
+
+    printf("[%zu.%ld] sent packet type %d to fd %d\n", now.tv_sec, now.tv_nsec, type, fd);
+
     return 0;
 }
 
@@ -169,13 +175,17 @@ net_recvpacket(client_t* client, header_t* out_header, void* out_data_buffer, in
     // -2  = header only (need more data next time)
     // < -2 = various errors (-errno-4)
 
+    struct timespec header_time;
+    clock_gettime(CLOCK_MONOTONIC, &header_time);
+
     uint8_t* buf = client->recv_buf;
     size_t*  len = &client->recv_buf_len;
 
     while(1) {
         if(*len < sizeof(header_t)) {
             int r = recv(client->fd, buf + *len, sizeof(header_t) - *len, 0);
-            // printf("header recv on fd %d → %d bytes (len now %zu)\n", client->fd, r, *len);
+            printf("[%zu.%ld] header recv on fd %d → %d bytes (len now %zu)\n",
+                   header_time.tv_sec, header_time.tv_nsec, client->fd, r, *len);
             if(r == 0) return -1;
             if(r < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
@@ -226,10 +236,13 @@ net_recvpacket(client_t* client, header_t* out_header, void* out_data_buffer, in
             return -2;
         }
 
+        struct timespec data_time;
+        clock_gettime(CLOCK_MONOTONIC, &data_time);
+
         if (*len < total_needed) {
             ssize_t r = recv(client->fd, buf + *len, total_needed - *len, 0);
-            //printf("payload recv on fd %d → %d bytes (total len %zu/%zu)\n",
-            //       client->fd, r, *len, total_needed);
+            printf("[%zu.%ld] payload recv on fd %d → %d bytes (total len %zu/%zu)\n",
+                   data_time.tv_sec, data_time.tv_nsec, client->fd, r, *len, total_needed);
             if (r == 0) return -1;
             if (r < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;

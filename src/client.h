@@ -3,7 +3,6 @@
  * */
 
 #pragma once
-
 #include "packet.h"
 
 void cl_initqueue(client_t* client);

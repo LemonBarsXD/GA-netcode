@@ -137,9 +137,6 @@ int main(int argc, char *argv[])
             int res;
 
             while((res = net_recvpacket(&my_client, &in_header, net_buffer, 1024)) == 1) {
-                if(in_header.type != PACKET_FULL_STATE) {
-                    printf("packet received: %d\n", in_header.type);
-                }
                 switch(in_header.type) {
                     case PACKET_CONNECT:
                         {
@@ -180,7 +177,7 @@ int main(int argc, char *argv[])
                                 // simple reconciliation
                                 float dist = Vector2Distance(my_pos, my_server_ghost);
                                 if(dist > 20.0f) {
-                                    printf("Reconciliation to: %f\n", dist);
+                                    printf("Reconciliation dist: %f\n", dist);
                                     my_pos = my_server_ghost;
                                 }
                             }
