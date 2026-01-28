@@ -14,7 +14,6 @@
 #include "client.h"
 #include "cfg.h"
 
-#define PLAYER_SPEED 5.f
 
 client_t clients[MAX_PLAYERS];
 
