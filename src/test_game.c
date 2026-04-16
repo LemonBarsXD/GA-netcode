@@ -10,7 +10,6 @@
 #define SCREEN_WIDTH 1000
 #define SCREEN_HEIGHT 800
 
-#define PLAYER_SPEED 200.0f
 #define PLAYER_SIZE 40.0f
 
 #define PING_INTERVAL 1.0f

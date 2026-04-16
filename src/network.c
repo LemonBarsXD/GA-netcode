@@ -158,7 +158,7 @@ net_broadcast(client_t* clients, int amount, int fd_exclude, uint8_t type, void*
             if(net_sendpacket(clients[i].fd, type, buffer, size) != -1){
                 count++;
             } else {
-                printf("Broadcast FD %d: send failed: %s", clients[i].fd, strerror(errno));
+                printf("Broadcast FD %d: send failed: %s\n", clients[i].fd, strerror(errno));
             }
         }
     }
@@ -268,6 +268,6 @@ void
 net_close(int fd)
 {
     if(close(fd) == -1) {
-        printf("FD %d: close failed: %s", fd, strerror(errno));
+        printf("FD %d: close failed: %s\n", fd, strerror(errno));
     }
 }

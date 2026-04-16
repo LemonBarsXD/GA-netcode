@@ -72,9 +72,9 @@ void* svloop(void* arg) {
                         cl_initqueue(&clients[i]);
                         clients[i].fd = new_fd;
                         clients[i].active = 1;
-                        clients[i].state.x = 0;
-                        clients[i].state.y = 0;
-                        clients[i].state.z = 0.5f;
+                        clients[i].state.x = 1.4f;
+                        clients[i].state.y = 1.1f;
+                        clients[i].state.z = -4.0f;
                         clients[i].state.entindex = (uint16_t)i;
                         clients[i].recv_buf_len = 0;
                         found_slot = 1;
@@ -246,26 +246,26 @@ int main() {
                     float move_amt = PLAYER_SPEED * TICK_DELTA;
 
                     float fwd_x = sinf(yaw_rad);
-                    float fwd_y = cosf(yaw_rad);
+                    float fwd_z = cosf(yaw_rad);
 
                     float right_x = cosf(yaw_rad);
-                    float right_y = -sinf(yaw_rad);
+                    float right_z = -sinf(yaw_rad);
 
                     if (cmd.buttons & IN_FORWARD) {
-                        clients[j].state.x += fwd_x * move_amt;
-                        clients[j].state.y += fwd_y * move_amt;
+                        clients[j].state.x += fwd_x * move_amt; 
+                        clients[j].state.z += fwd_z * move_amt; 
                     }
                     if (cmd.buttons & IN_BACKWARD) {
                         clients[j].state.x -= fwd_x * move_amt;
-                        clients[j].state.y -= fwd_y * move_amt;
+                        clients[j].state.z -= fwd_z * move_amt;
                     }
                     if (cmd.buttons & IN_RIGHT) {
                         clients[j].state.x += right_x * move_amt;
-                        clients[j].state.y += right_y * move_amt;
+                        clients[j].state.z += right_z * move_amt;
                     }
                     if (cmd.buttons & IN_LEFT) {
                         clients[j].state.x -= right_x * move_amt;
-                        clients[j].state.y -= right_y * move_amt;
+                        clients[j].state.z -= right_z * move_amt;
                     }
 
                     clients[j].state.last_processed_tick = cmd.tick_number;

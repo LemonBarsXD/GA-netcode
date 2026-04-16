@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 #include <time.h>
-#include <pthread.h> // for future multithreading
+#include <pthread.h>
 
 #include "cfg.h"
 
@@ -74,7 +74,7 @@ typedef struct {
     user_cmd_t cmdqueue[TICK_RATE];
     size_t cmdqueue_len;
     size_t cmd_head;
-    pthread_mutex_t cmd_mutex; // for future multithreading
+    pthread_mutex_t cmd_mutex;
     sv_state_t state;
     int fd;
     int active;
