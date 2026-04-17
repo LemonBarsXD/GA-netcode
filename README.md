@@ -1,1 +1,1 @@
-gjorde den public för att kunna git clona utan besvär, bara därför.
+gjorde denna för att kunna dela kod till GA
