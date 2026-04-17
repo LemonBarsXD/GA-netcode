@@ -179,7 +179,7 @@ void* svloop(void* arg) {
                             }
                     }
                 } else if (res == -1 || res == -2) {
-                    printf("Client disconnected (error/invalid packet): %d\n", clients[i].fd);
+                    printf("Client disconnected (error/invalid packet): fd %d dropped\n", clients[i].fd);
                     net_disconnect_t dc = {.entindex=clients[i].state.entindex, .reason=2};
                     net_broadcast(
                         clients,
@@ -251,22 +251,35 @@ int main() {
                     float right_x = cosf(yaw_rad);
                     float right_z = -sinf(yaw_rad);
 
-                    if (cmd.buttons & IN_FORWARD) {
-                        clients[j].state.x += fwd_x * move_amt; 
-                        clients[j].state.z += fwd_z * move_amt; 
-                    }
-                    if (cmd.buttons & IN_BACKWARD) {
-                        clients[j].state.x -= fwd_x * move_amt;
-                        clients[j].state.z -= fwd_z * move_amt;
-                    }
-                    if (cmd.buttons & IN_RIGHT) {
-                        clients[j].state.x += right_x * move_amt;
-                        clients[j].state.z += right_z * move_amt;
-                    }
-                    if (cmd.buttons & IN_LEFT) {
-                        clients[j].state.x -= right_x * move_amt;
-                        clients[j].state.z -= right_z * move_amt;
-                    }
+		    float move_x = 0.0f;
+		    float move_z = 0.0f;
+
+		    if (cmd.buttons & IN_FORWARD) {
+			    move_x += fwd_x;
+			    move_z += fwd_z;
+		    }
+		    		
+		    if (cmd.buttons & IN_BACKWARD) {
+			    move_x -= fwd_x;
+			    move_z -= fwd_z;
+		    }
+		    if (cmd.buttons & IN_RIGHT) {
+			    move_x += right_x;
+			    move_z += right_z;
+		    }
+		    if (cmd.buttons & IN_LEFT) {
+			    move_x -= right_x;
+			    move_z -= right_z;
+		    }
+
+		    float length = sqrtf(move_x * move_x + move_z * move_z);
+		    if (length > 0.0001f) {
+			    move_x /= length;
+			    move_z /= length;
+		    }
+
+		    clients[j].state.x += move_x * move_amt;
+		    clients[j].state.z += move_z * move_amt;
 
                     clients[j].state.last_processed_tick = cmd.tick_number;
                     clients[j].state.view_angle_yaw = cmd.view_angle_yaw;
