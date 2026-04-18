@@ -1,6 +1,6 @@
 CC = gcc
 VPATH = src
-CFLAGS = -Wextra -std=gnu99 -Isrc -Ipthread -lGL -ldl -lm
+CFLAGS = -Wextra -std=gnu99 -Isrc -Ipthread -ldl -lm
 
 BIN_PATH = bin/
 
@@ -12,13 +12,13 @@ GAME_SRC = test_game.c
 GAME_OUT = game
 GAME_LIBS = -lraylib
 
-all: bin server game
+all: bin server
 
 server: $(SERVER_SRC) $(SHARED_SRC)
 	$(CC) $^ -o $(BIN_PATH)$(SERVER_OUT) $(CFLAGS)
 
 game: $(GAME_SRC) $(SHARED_SRC)
-	$(CC) $^ -o $(BIN_PATH)$(GAME_OUT) $(CFLAGS) $(GAME_LIBS)
+	$(CC) $^ -o $(BIN_PATH)$(GAME_OUT) $(CFLAGS) -lGL $(GAME_LIBS)
 
 bin:
 	@mkdir -p $(BIN_PATH)
