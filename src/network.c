@@ -241,7 +241,7 @@ net_recvpacket(client_t* client, header_t* out_header, void* out_data_buffer, in
 
         if (*len < total_needed) {
             ssize_t r = recv(client->fd, buf + *len, total_needed - *len, 0);
-            printf("[%zu.%ld] payload recv on fd %d → %d bytes (total len %zu/%zu)\n",
+            printf("[%zu.%ld] payload recv on fd %d → %ld bytes (total len %zu/%zu)\n",
                    data_time.tv_sec, data_time.tv_nsec, client->fd, r, *len, total_needed);
             if (r == 0) return -1;
             if (r < 0) {
